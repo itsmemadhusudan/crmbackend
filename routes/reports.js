@@ -17,17 +17,28 @@ router.get('/branch-dashboard', async (req, res) => {
   try {
     const { from, to } = req.query;
     const bid = getBranchId(req.user);
+
+    const fromDate = from ? new Date(from) : new Date(new Date().setDate(1));
+    const toDate = to ? new Date(to) : new Date();
+
     if (!bid) {
-      return res.status(400).json({ success: false, message: 'Branch context required. Use sales-dashboard for owner.' });
+      return res.json({
+        success: true,
+        from: fromDate,
+        to: toDate,
+        membershipSalesCount: 0,
+        membershipSalesRevenue: 0,
+        todayAppointments: [],
+        leadsToFollowUp: [],
+        servicesCompleted: 0,
+        membershipUsageInBranch: 0,
+      });
     }
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
-
-    const fromDate = from ? new Date(from) : new Date(new Date().setDate(1));
-    const toDate = to ? new Date(to) : new Date();
 
     const [membershipSales, todayAppointments, followUpLeads, completedAppointments, membershipUsageInBranch] = await Promise.all([
       Membership.find({ soldAtBranchId: bid, purchaseDate: { $gte: fromDate, $lte: toDate } })

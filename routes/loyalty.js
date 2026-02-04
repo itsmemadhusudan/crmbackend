@@ -1,6 +1,10 @@
 const express = require('express');
 const LoyaltyAccount = require('../models/LoyaltyAccount');
 const LoyaltyTransaction = require('../models/LoyaltyTransaction');
+const Appointment = require('../models/Appointment');
+const Membership = require('../models/Membership');
+const MembershipUsage = require('../models/MembershipUsage');
+const Customer = require('../models/Customer');
 const { protect } = require('../middleware/auth');
 const { getBranchId } = require('../middleware/branchFilter');
 
@@ -15,6 +19,72 @@ async function getOrCreateAccount(customerId) {
   }
   return account;
 }
+
+// GET /api/loyalty/insights — repeated customers + customers who upgrade membership (must be before /:customerId)
+router.get('/insights', async (req, res) => {
+  try {
+    const bid = getBranchId(req.user);
+    const isAdmin = req.user.role === 'admin';
+
+    let appointmentFilter = { status: 'completed' };
+    let membershipFilter = {};
+    if (bid) {
+      appointmentFilter.branchId = bid;
+      membershipFilter.soldAtBranchId = bid;
+    }
+
+    const [repeatedAgg, membershipAgg] = await Promise.all([
+      Appointment.aggregate([
+        { $match: appointmentFilter },
+        { $group: { _id: '$customerId', visitCount: { $sum: 1 }, lastVisitAt: { $max: '$scheduledAt' } } },
+        { $match: { visitCount: { $gte: 2 } } },
+        { $sort: { visitCount: -1 } },
+        { $limit: 100 },
+      ]),
+      Membership.aggregate([
+        { $match: membershipFilter },
+        { $group: { _id: '$customerId', membershipCount: { $sum: 1 }, lastPurchaseAt: { $max: '$purchaseDate' } } },
+        { $match: { membershipCount: { $gte: 2 } } },
+        { $sort: { membershipCount: -1 } },
+        { $limit: 100 },
+      ]),
+    ]);
+
+    const customerIds = [...new Set([...repeatedAgg.map((r) => r._id), ...membershipAgg.map((m) => m._id)])];
+    const customers = await Customer.find({ _id: { $in: customerIds } }).lean();
+    const customerMap = Object.fromEntries(customers.map((c) => [c._id.toString(), c]));
+
+    const repeatedCustomers = repeatedAgg.map((r) => {
+      const c = customerMap[r._id.toString()];
+      return {
+        customerId: r._id.toString(),
+        customerName: c?.name ?? '—',
+        phone: c?.phone ?? '—',
+        visitCount: r.visitCount,
+        lastVisitAt: r.lastVisitAt,
+      };
+    });
+
+    const membershipUpgraders = membershipAgg.map((m) => {
+      const c = customerMap[m._id.toString()];
+      return {
+        customerId: m._id.toString(),
+        customerName: c?.name ?? '—',
+        phone: c?.phone ?? '—',
+        membershipCount: m.membershipCount,
+        lastPurchaseAt: m.lastPurchaseAt,
+      };
+    });
+
+    res.json({
+      success: true,
+      repeatedCustomers,
+      membershipUpgraders,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to fetch loyalty insights.' });
+  }
+});
 
 router.get('/:customerId', async (req, res) => {
   try {

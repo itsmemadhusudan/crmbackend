@@ -22,9 +22,10 @@ connectDB();
 
 const app = express();
 app.use(helmet());
+
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
+    if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, origin ? origin : true);
     cb(null, false);
   },
   credentials: true,
