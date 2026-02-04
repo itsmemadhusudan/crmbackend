@@ -196,7 +196,7 @@ router.post('/:id/use', async (req, res) => {
 
     const membership = await Membership.findById(req.params.id)
       .populate('customerId', 'name phone')
-      .populate('membershipTypeId', 'name')
+      .populate('membershipTypeId', 'name price totalCredits')
       .populate('soldAtBranchId', 'name');
     if (!membership) return res.status(404).json({ success: false, message: 'Membership not found.' });
 
@@ -219,10 +219,13 @@ router.post('/:id/use', async (req, res) => {
 
     const soldAtBranchId = membership.soldAtBranchId._id || membership.soldAtBranchId;
     if (String(soldAtBranchId) !== String(usedAtBranchId)) {
+      const price = membership.membershipTypeId?.price != null ? Number(membership.membershipTypeId.price) : 0;
+      const totalCredits = membership.totalCredits || 1;
+      const amount = totalCredits > 0 ? (price / totalCredits) * toUse : 0;
       await InternalSettlement.create({
         fromBranchId: soldAtBranchId,
         toBranchId: usedAtBranchId,
-        amount: 0,
+        amount: Math.round(amount * 100) / 100,
         reason: `Membership usage: ${membership.membershipTypeId?.name || 'Membership'} - ${toUse} credit(s)`,
         membershipUsageId: usage._id,
         status: 'pending',

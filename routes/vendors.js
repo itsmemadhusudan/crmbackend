@@ -85,13 +85,50 @@ router.patch('/:id/reject', async (req, res) => {
   }
 });
 
+router.get('/:id', async (req, res) => {
+  try {
+    const vendor = await User.findOne({ _id: req.params.id, role: 'vendor' })
+      .select('name email vendorName approvalStatus branchId createdAt')
+      .populate('branchId', 'name code address')
+      .lean();
+    if (!vendor) return res.status(404).json({ success: false, message: 'Vendor not found.' });
+    res.json({
+      success: true,
+      vendor: {
+        id: vendor._id,
+        name: vendor.name,
+        email: vendor.email,
+        vendorName: vendor.vendorName,
+        approvalStatus: vendor.approvalStatus || 'pending',
+        branchId: vendor.branchId?._id || vendor.branchId,
+        branchName: vendor.branchId?.name,
+        branchCode: vendor.branchId?.code,
+        createdAt: vendor.createdAt,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to fetch vendor.' });
+  }
+});
+
 router.patch('/:id', async (req, res) => {
   try {
     const vendor = await User.findOne({ _id: req.params.id, role: 'vendor' });
     if (!vendor) return res.status(404).json({ success: false, message: 'Vendor not found.' });
-    if (req.body.branchId !== undefined) vendor.branchId = req.body.branchId || null;
+    const { name, email, vendorName, branchId } = req.body;
+    if (name !== undefined) vendor.name = name;
+    if (email !== undefined) {
+      const trimmed = (email || '').trim().toLowerCase();
+      if (trimmed && trimmed !== vendor.email) {
+        const existing = await User.findOne({ email: trimmed });
+        if (existing) return res.status(400).json({ success: false, message: 'Email already in use.' });
+        vendor.email = trimmed;
+      }
+    }
+    if (vendorName !== undefined) vendor.vendorName = vendorName || '';
+    if (branchId !== undefined) vendor.branchId = branchId || null;
     await vendor.save();
-    const v = await User.findById(vendor._id).select('name email vendorName approvalStatus branchId').populate('branchId', 'name').lean();
+    const v = await User.findById(vendor._id).select('name email vendorName approvalStatus branchId').populate('branchId', 'name code').lean();
     res.json({
       success: true,
       vendor: {

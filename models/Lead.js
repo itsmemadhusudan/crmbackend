@@ -16,7 +16,7 @@ const leadSchema = new mongoose.Schema(
     email: { type: String, trim: true, lowercase: true },
     source: { type: String, enum: ['ad', 'website', 'call', 'walk-in', 'other'], default: 'other' },
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true },
-    status: { type: String, enum: ['new', 'contacted', 'qualified', 'booked', 'lost'], default: 'new' },
+    status: { type: String, trim: true, default: 'New' },
     followUps: [followUpSchema],
     notes: { type: String, trim: true },
   },

@@ -8,6 +8,8 @@
     "dev": "nodemon index.js",
     "seed": "node seeders/seedAdmin.js",
     "seed:admin": "node seeders/seedAdmin.js",
+    "seed:lead-statuses": "node seeders/seedLeadStatuses.js",
+    "seed:all": "node seeders/seedAdmin.js && node seeders/seedLeadStatuses.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

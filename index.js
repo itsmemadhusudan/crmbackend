@@ -13,8 +13,10 @@ const membershipTypeRoutes = require('./routes/membershipTypes');
 const membershipRoutes = require('./routes/memberships');
 const serviceRoutes = require('./routes/services');
 const leadRoutes = require('./routes/leads');
+const leadStatusRoutes = require('./routes/leadStatuses');
 const appointmentRoutes = require('./routes/appointments');
 const reportRoutes = require('./routes/reports');
+const loyaltyRoutes = require('./routes/loyalty');
 
 connectDB();
 
@@ -39,8 +41,10 @@ app.use('/api/membership-types', membershipTypeRoutes);
 app.use('/api/memberships', membershipRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/leads', leadRoutes);
+app.use('/api/lead-statuses', leadStatusRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/loyalty', loyaltyRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'API is running' });

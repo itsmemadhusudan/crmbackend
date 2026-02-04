@@ -2,7 +2,6 @@ const express = require('express');
 const Customer = require('../models/Customer');
 const Membership = require('../models/Membership');
 const { protect } = require('../middleware/auth');
-const { getBranchId } = require('../middleware/branchFilter');
 
 const router = express.Router();
 
@@ -16,9 +15,7 @@ router.get('/customers-memberships', async (req, res) => {
     }
     const term = String(q).trim();
     const isPhone = /^\d+$/.test(term);
-    let customerFilter = {};
-    const bid = getBranchId(req.user);
-    if (bid) customerFilter.primaryBranchId = bid;
+    const customerFilter = {};
 
     let customers = [];
     if (isPhone) {
