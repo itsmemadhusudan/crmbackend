@@ -24,5 +24,6 @@ const leadSchema = new mongoose.Schema(
 );
 
 leadSchema.index({ branchId: 1, createdAt: -1 });
+leadSchema.index({ branchId: 1, status: 1 });
 
 module.exports = mongoose.model('Lead', leadSchema);

@@ -123,6 +123,19 @@ router.patch('/profile', protect, async (req, res) => {
     const u = await User.findById(user._id).populate('branchId', 'name').select('-password').lean();
     const branchId = u.branchId?._id || u.branchId || null;
     const branchName = u.branchId?.name || null;
+router.patch('/me', protect, async (req, res) => {
+  try {
+    const { branchId } = req.body;
+    if (req.user.role !== 'vendor') {
+      return res.status(400).json({ success: false, message: 'Only vendors can set their own branch.' });
+    }
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+    user.branchId = branchId || null;
+    await user.save();
+    const u = await User.findById(user._id).populate('branchId', 'name').select('-password').lean();
+    const newBranchId = u.branchId?._id || u.branchId || null;
+    const newBranchName = u.branchId?.name || null;
     res.json({
       success: true,
       user: {
@@ -134,6 +147,9 @@ router.patch('/profile', protect, async (req, res) => {
         approvalStatus: u.role === 'admin' ? 'approved' : (u.approvalStatus || 'pending'),
         branchId,
         branchName,
+        approvalStatus: u.approvalStatus || 'pending',
+        branchId: newBranchId,
+        branchName: newBranchName,
       },
     });
   } catch (err) {

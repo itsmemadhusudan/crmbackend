@@ -13,6 +13,7 @@ const router = express.Router();
 
 router.use(protect);
 
+/** GET /api/reports/branch-dashboard - vendor branch dashboard (from/to, KPIs, today appointments, leads to follow up) */
 router.get('/branch-dashboard', async (req, res) => {
   try {
     const { from, to } = req.query;
@@ -34,6 +35,11 @@ router.get('/branch-dashboard', async (req, res) => {
         membershipUsageInBranch: 0,
       });
     }
+    if (!bid) {
+      return res.status(400).json({ success: false, message: 'No branch assigned. Ask an admin to assign a branch to your account.' });
+    }
+    const fromDate = from ? new Date(from) : new Date(new Date().setDate(new Date().getDate() - 30));
+    const toDate = to ? new Date(to) : new Date();
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -41,6 +47,7 @@ router.get('/branch-dashboard', async (req, res) => {
     todayEnd.setHours(23, 59, 59, 999);
 
     const [membershipSales, todayAppointments, followUpLeads, completedAppointments, membershipUsageInBranch] = await Promise.all([
+    const [membershipsInPeriod, todayAppointments, leadsToFollowUp, completedAppointments, usageInBranch] = await Promise.all([
       Membership.find({ soldAtBranchId: bid, purchaseDate: { $gte: fromDate, $lte: toDate } })
         .populate('membershipTypeId', 'name price')
         .lean(),
@@ -61,6 +68,33 @@ router.get('/branch-dashboard', async (req, res) => {
     ]);
 
     const totalSalesRevenue = membershipSales.reduce((sum, m) => sum + (m.membershipTypeId?.price || 0), 0);
+        .populate('serviceId', 'name')
+        .sort({ scheduledAt: 1 })
+        .lean(),
+      Lead.find({ branchId: bid }).sort({ updatedAt: -1 }).lean(),
+      Appointment.countDocuments({ branchId: bid, status: 'completed', scheduledAt: { $gte: fromDate, $lte: toDate } }),
+      MembershipUsage.countDocuments({ usedAtBranchId: bid, usedAt: { $gte: fromDate, $lte: toDate } }),
+    ]);
+
+    let membershipSalesRevenue = 0;
+    membershipsInPeriod.forEach((m) => { membershipSalesRevenue += m.membershipTypeId?.price || 0; });
+
+    const todayAppointmentsFormatted = todayAppointments.map((a) => ({
+      id: a._id,
+      customer: a.customerId ? { name: a.customerId.name, phone: a.customerId.phone } : undefined,
+      staff: undefined,
+      service: a.serviceId?.name,
+      scheduledAt: a.scheduledAt,
+      status: a.status,
+    }));
+
+    const leadsFormatted = leadsToFollowUp.map((l) => ({
+      id: l._id,
+      name: l.name,
+      phone: l.phone,
+      status: l.status,
+      updatedAt: l.updatedAt,
+    }));
 
     res.json({
       success: true,
@@ -85,6 +119,12 @@ router.get('/branch-dashboard', async (req, res) => {
       })),
       servicesCompleted: completedAppointments,
       membershipUsageInBranch: membershipUsageInBranch.length,
+      membershipSalesCount: membershipsInPeriod.length,
+      membershipSalesRevenue,
+      todayAppointments: todayAppointmentsFormatted,
+      leadsToFollowUp: leadsFormatted,
+      servicesCompleted: completedAppointments,
+      membershipUsageInBranch: usageInBranch,
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message || 'Branch dashboard failed.' });
@@ -95,8 +135,12 @@ router.get('/sales-dashboard', async (req, res) => {
   try {
     const { branchId, from, to, serviceCategory } = req.query;
     const bid = getBranchId(req.user);
-    const branchFilter = bid ? { soldAtBranchId: bid } : {};
-    if (req.user.role === 'admin' && branchId) branchFilter.soldAtBranchId = branchId;
+    let branchFilter = {};
+    if (req.user.role === 'admin' && branchId) branchFilter = { soldAtBranchId: branchId };
+    else if (req.user.role === 'vendor') {
+      if (!bid) branchFilter = { soldAtBranchId: { $in: [] } };
+      else branchFilter = { soldAtBranchId: bid };
+    }
 
     const fromDate = from ? new Date(from) : new Date(new Date().setMonth(new Date().getMonth() - 1));
     const toDate = to ? new Date(to) : new Date();

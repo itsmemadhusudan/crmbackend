@@ -1,16 +1,14 @@
 const express = require('express');
 const Appointment = require('../models/Appointment');
 const { protect } = require('../middleware/auth');
-const { getBranchId } = require('../middleware/branchFilter');
+const { getBranchId, branchFilter } = require('../middleware/branchFilter');
 
 const router = express.Router();
 
 router.use(protect);
 
 function appointmentFilter(req) {
-  const bid = getBranchId(req.user);
-  if (bid) return { branchId: bid };
-  return {};
+  return branchFilter(req.user);
 }
 
 router.get('/', async (req, res) => {
@@ -56,7 +54,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { customerId, branchId, staffUserId, serviceId, scheduledAt, status, notes } = req.body;
+    const { customerId, branchId, staffUserId, serviceId, scheduledAt, notes } = req.body;
     if (!customerId || !scheduledAt) return res.status(400).json({ success: false, message: 'customerId and scheduledAt are required.' });
     const bid = getBranchId(req.user) || branchId;
     if (!bid) return res.status(400).json({ success: false, message: 'Branch is required.' });
@@ -67,7 +65,7 @@ router.post('/', async (req, res) => {
       staffUserId: staffUserId || undefined,
       serviceId: serviceId || undefined,
       scheduledAt: new Date(scheduledAt),
-      status: status || 'scheduled',
+      status: 'pending',
       notes: notes || undefined,
     });
 
@@ -94,16 +92,21 @@ router.post('/', async (req, res) => {
 
 router.patch('/:id', async (req, res) => {
   try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only admins can update appointment status.' });
+    }
     const appointment = await Appointment.findById(req.params.id);
     if (!appointment) return res.status(404).json({ success: false, message: 'Appointment not found.' });
     const filter = appointmentFilter(req);
     if (filter.branchId && String(appointment.branchId) !== String(filter.branchId))
       return res.status(404).json({ success: false, message: 'Appointment not found.' });
 
-    const { scheduledAt, status, notes } = req.body;
-    if (scheduledAt !== undefined) appointment.scheduledAt = new Date(scheduledAt);
-    if (status !== undefined) appointment.status = status;
-    if (notes !== undefined) appointment.notes = notes;
+    const { status } = req.body;
+    if (status !== undefined) {
+      const allowed = ['pending', 'accepted', 'rejected', 'completed'];
+      if (!allowed.includes(status)) return res.status(400).json({ success: false, message: 'Invalid status.' });
+      appointment.status = status;
+    }
     await appointment.save();
 
     const a = await Appointment.findById(appointment._id)

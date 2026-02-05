@@ -37,6 +37,31 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.get('/:id', async (req, res) => {
+  try {
+    const vendor = await User.findOne({ _id: req.params.id, role: 'vendor' })
+      .select('name email vendorName approvalStatus branchId createdAt')
+      .populate('branchId', 'name code')
+      .lean();
+    if (!vendor) return res.status(404).json({ success: false, message: 'Vendor not found.' });
+    res.json({
+      success: true,
+      vendor: {
+        id: vendor._id,
+        name: vendor.name,
+        email: vendor.email,
+        vendorName: vendor.vendorName,
+        approvalStatus: vendor.approvalStatus || 'pending',
+        branchId: vendor.branchId?._id || vendor.branchId || null,
+        branchName: vendor.branchId?.name || null,
+        createdAt: vendor.createdAt,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to fetch vendor.' });
+  }
+});
+
 router.patch('/:id/approve', async (req, res) => {
   try {
     const vendor = await User.findOne({ _id: req.params.id, role: 'vendor' });
