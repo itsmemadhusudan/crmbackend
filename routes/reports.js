@@ -19,7 +19,7 @@ router.get('/branch-dashboard', async (req, res) => {
     const { from, to } = req.query;
     const bid = getBranchId(req.user);
 
-    const fromDate = from ? new Date(from) : new Date(new Date().setDate(1));
+    const fromDate = from ? new Date(from) : new Date(new Date().setDate(new Date().getDate() - 30));
     const toDate = to ? new Date(to) : new Date();
 
     if (!bid) {
@@ -35,18 +35,12 @@ router.get('/branch-dashboard', async (req, res) => {
         membershipUsageInBranch: 0,
       });
     }
-    if (!bid) {
-      return res.status(400).json({ success: false, message: 'No branch assigned. Ask an admin to assign a branch to your account.' });
-    }
-    const fromDate = from ? new Date(from) : new Date(new Date().setDate(new Date().getDate() - 30));
-    const toDate = to ? new Date(to) : new Date();
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    const [membershipSales, todayAppointments, followUpLeads, completedAppointments, membershipUsageInBranch] = await Promise.all([
     const [membershipsInPeriod, todayAppointments, leadsToFollowUp, completedAppointments, usageInBranch] = await Promise.all([
       Membership.find({ soldAtBranchId: bid, purchaseDate: { $gte: fromDate, $lte: toDate } })
         .populate('membershipTypeId', 'name price')
@@ -67,41 +61,15 @@ router.get('/branch-dashboard', async (req, res) => {
         .lean(),
     ]);
 
-    const totalSalesRevenue = membershipSales.reduce((sum, m) => sum + (m.membershipTypeId?.price || 0), 0);
-        .populate('serviceId', 'name')
-        .sort({ scheduledAt: 1 })
-        .lean(),
-      Lead.find({ branchId: bid }).sort({ updatedAt: -1 }).lean(),
-      Appointment.countDocuments({ branchId: bid, status: 'completed', scheduledAt: { $gte: fromDate, $lte: toDate } }),
-      MembershipUsage.countDocuments({ usedAtBranchId: bid, usedAt: { $gte: fromDate, $lte: toDate } }),
-    ]);
-
     let membershipSalesRevenue = 0;
     membershipsInPeriod.forEach((m) => { membershipSalesRevenue += m.membershipTypeId?.price || 0; });
-
-    const todayAppointmentsFormatted = todayAppointments.map((a) => ({
-      id: a._id,
-      customer: a.customerId ? { name: a.customerId.name, phone: a.customerId.phone } : undefined,
-      staff: undefined,
-      service: a.serviceId?.name,
-      scheduledAt: a.scheduledAt,
-      status: a.status,
-    }));
-
-    const leadsFormatted = leadsToFollowUp.map((l) => ({
-      id: l._id,
-      name: l.name,
-      phone: l.phone,
-      status: l.status,
-      updatedAt: l.updatedAt,
-    }));
 
     res.json({
       success: true,
       from: fromDate,
       to: toDate,
-      membershipSalesCount: membershipSales.length,
-      membershipSalesRevenue: totalSalesRevenue,
+      membershipSalesCount: membershipsInPeriod.length,
+      membershipSalesRevenue,
       todayAppointments: todayAppointments.map((a) => ({
         id: a._id,
         customer: a.customerId ? { name: a.customerId.name, phone: a.customerId.phone } : null,
@@ -110,7 +78,7 @@ router.get('/branch-dashboard', async (req, res) => {
         scheduledAt: a.scheduledAt,
         status: a.status,
       })),
-      leadsToFollowUp: followUpLeads.map((l) => ({
+      leadsToFollowUp: leadsToFollowUp.map((l) => ({
         id: l._id,
         name: l.name,
         phone: l.phone,
@@ -118,13 +86,7 @@ router.get('/branch-dashboard', async (req, res) => {
         updatedAt: l.updatedAt,
       })),
       servicesCompleted: completedAppointments,
-      membershipUsageInBranch: membershipUsageInBranch.length,
-      membershipSalesCount: membershipsInPeriod.length,
-      membershipSalesRevenue,
-      todayAppointments: todayAppointmentsFormatted,
-      leadsToFollowUp: leadsFormatted,
-      servicesCompleted: completedAppointments,
-      membershipUsageInBranch: usageInBranch,
+      membershipUsageInBranch: usageInBranch.length,
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message || 'Branch dashboard failed.' });

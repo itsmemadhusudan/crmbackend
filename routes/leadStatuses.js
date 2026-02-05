@@ -1,17 +1,7 @@
 const express = require('express');
-const LeadStatus = require('../models/LeadStatus');
-const { protect, authorize } = require('../middleware/auth');
-
-const router = express.Router();
-
-router.use(protect);
-
-router.get('/', async (req, res) => {
-  try {
-    const statuses = await LeadStatus.find({ isActive: true }).sort({ order: 1, name: 1 }).lean();
 const mongoose = require('mongoose');
-const { protect, authorize } = require('../middleware/auth');
 const LeadStatus = require('../models/LeadStatus');
+const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(protect);
@@ -45,13 +35,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', authorize('admin'), async (req, res) => {
-  try {
-    const { name, order, isDefault } = req.body;
-    if (!name || !String(name).trim())
-      return res.status(400).json({ success: false, message: 'Name is required.' });
-    const status = await LeadStatus.create({
-      name: String(name).trim(),
 /** POST /api/lead-statuses - create (admin only) */
 router.post('/', authorize('admin'), async (req, res) => {
   try {
@@ -76,9 +59,6 @@ router.post('/', authorize('admin'), async (req, res) => {
   }
 });
 
-router.patch('/:id', authorize('admin'), async (req, res) => {
-  try {
-    const status = await LeadStatus.findById(req.params.id);
 /** PATCH /api/lead-statuses/:id */
 router.patch('/:id', authorize('admin'), async (req, res) => {
   try {
@@ -101,20 +81,12 @@ router.patch('/:id', authorize('admin'), async (req, res) => {
     res.json({
       success: true,
       leadStatus: { id: status._id, name: status.name, order: status.order, isDefault: status.isDefault, isActive: status.isActive },
-      leadStatus: { id: status._id, name: status.name, order: status.order, isDefault: status.isDefault },
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message || 'Failed to update lead status.' });
   }
 });
 
-router.delete('/:id', authorize('admin'), async (req, res) => {
-  try {
-    const status = await LeadStatus.findById(req.params.id);
-    if (!status) return res.status(404).json({ success: false, message: 'Lead status not found.' });
-    status.isActive = false;
-    await status.save();
-    res.json({ success: true, message: 'Lead status deactivated.' });
 /** DELETE /api/lead-statuses/:id - soft delete (set isActive: false) */
 router.delete('/:id', authorize('admin'), async (req, res) => {
   try {

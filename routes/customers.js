@@ -13,8 +13,6 @@ router.use(protect);
 router.get('/', async (req, res) => {
   try {
     const bid = getBranchId(req.user);
-    const filter = {};
-    if (bid) filter.primaryBranchId = bid;
     let filter = {};
     if (req.user.role === 'vendor') {
       if (!bid) filter = { _id: { $in: [] } };
