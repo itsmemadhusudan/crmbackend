@@ -78,4 +78,18 @@ router.patch('/:id', authorize('admin'), async (req, res) => {
   }
 });
 
+router.delete('/:id', authorize('admin'), async (req, res) => {
+  try {
+    const branch = await Branch.findByIdAndUpdate(
+      req.params.id,
+      { isActive: false },
+      { new: true }
+    ).lean();
+    if (!branch) return res.status(404).json({ success: false, message: 'Branch not found.' });
+    res.json({ success: true, message: 'Branch deactivated.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to delete branch.' });
+  }
+});
+
 module.exports = router;

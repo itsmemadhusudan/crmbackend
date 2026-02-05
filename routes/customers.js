@@ -1,5 +1,8 @@
 const express = require('express');
 const Customer = require('../models/Customer');
+const Appointment = require('../models/Appointment');
+const Membership = require('../models/Membership');
+const MembershipUsage = require('../models/MembershipUsage');
 const { protect } = require('../middleware/auth');
 const { getBranchId } = require('../middleware/branchFilter');
 
@@ -10,6 +13,8 @@ router.use(protect);
 router.get('/', async (req, res) => {
   try {
     const bid = getBranchId(req.user);
+    const filter = {};
+    if (bid) filter.primaryBranchId = bid;
     let filter = {};
     if (req.user.role === 'vendor') {
       if (!bid) filter = { _id: { $in: [] } };
@@ -73,6 +78,10 @@ router.get('/:id', async (req, res) => {
   try {
     const customer = await Customer.findById(req.params.id).populate('primaryBranchId', 'name').lean();
     if (!customer) return res.status(404).json({ success: false, message: 'Customer not found.' });
+    const bid = getBranchId(req.user);
+    if (bid && String(customer.primaryBranchId?._id || customer.primaryBranchId) !== String(bid)) {
+      return res.status(404).json({ success: false, message: 'Customer not found.' });
+    }
     res.json({
       success: true,
       customer: {
@@ -93,8 +102,71 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+router.get('/:id/visit-history', async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.params.id);
+    if (!customer) return res.status(404).json({ success: false, message: 'Customer not found.' });
+    const bid = getBranchId(req.user);
+    if (bid && String(customer.primaryBranchId) !== String(bid)) {
+      return res.status(404).json({ success: false, message: 'Customer not found.' });
+    }
+
+    const membershipIds = await Membership.find({ customerId: req.params.id }).distinct('_id');
+
+    const [appointments, usageList] = await Promise.all([
+      Appointment.find({ customerId: req.params.id, status: 'completed' })
+        .populate('branchId', 'name')
+        .populate('staffUserId', 'name')
+        .populate('serviceId', 'name')
+        .sort({ scheduledAt: -1 })
+        .limit(200)
+        .lean(),
+      membershipIds.length
+        ? MembershipUsage.find({ membershipId: { $in: membershipIds } })
+            .populate('usedAtBranchId', 'name')
+            .populate('usedByUserId', 'name')
+            .sort({ usedAt: -1 })
+            .limit(200)
+            .lean()
+        : [],
+    ]);
+
+    const timeline = [
+      ...appointments.map((a) => ({
+        type: 'appointment',
+        id: a._id,
+        date: a.scheduledAt,
+        service: a.serviceId?.name,
+        branch: a.branchId?.name,
+        branchId: a.branchId?._id,
+        staff: a.staffUserId?.name,
+      })),
+      ...usageList.map((u) => ({
+        type: 'membership_usage',
+        id: u._id,
+        date: u.usedAt,
+        service: 'Membership service',
+        branch: u.usedAtBranchId?.name,
+        branchId: u.usedAtBranchId?._id,
+        staff: u.usedByUserId?.name,
+        creditsUsed: u.creditsUsed,
+      })),
+    ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    res.json({ success: true, visitHistory: timeline });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to fetch visit history.' });
+  }
+});
+
 router.patch('/:id', async (req, res) => {
   try {
+    const existing = await Customer.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ success: false, message: 'Customer not found.' });
+    const bid = getBranchId(req.user);
+    if (bid && String(existing.primaryBranchId) !== String(bid)) {
+      return res.status(404).json({ success: false, message: 'Customer not found.' });
+    }
     const customer = await Customer.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,

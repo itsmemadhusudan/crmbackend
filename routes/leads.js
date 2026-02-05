@@ -1,5 +1,6 @@
 const express = require('express');
 const Lead = require('../models/Lead');
+const LeadStatus = require('../models/LeadStatus');
 const { protect } = require('../middleware/auth');
 const { getBranchId, branchFilterForLead } = require('../middleware/branchFilter');
 
@@ -117,7 +118,13 @@ router.patch('/:id', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Lead not found.' });
 
     const { status, notes } = req.body;
-    if (status !== undefined) lead.status = status;
+    if (status !== undefined) {
+      const statusNames = await LeadStatus.find({ isActive: true }).distinct('name');
+      if (statusNames.length && !statusNames.includes(String(status).trim())) {
+        return res.status(400).json({ success: false, message: `Status must be one of: ${statusNames.join(', ')}` });
+      }
+      lead.status = String(status).trim();
+    }
     if (notes !== undefined) lead.notes = notes;
     await lead.save();
 
