@@ -17,8 +17,9 @@ router.get('/', async (req, res) => {
     const filter = {};
     if (req.user.role === 'admin') {
       if (branchId) filter.soldAtBranchId = branchId;
-    } else if (bid) {
-      filter.soldAtBranchId = bid;
+    } else if (req.user.role === 'vendor') {
+      if (!bid) filter._id = { $in: [] };
+      else filter.soldAtBranchId = bid;
     }
     if (customerId) filter.customerId = customerId;
     if (status) filter.status = status;

@@ -15,6 +15,8 @@ const serviceRoutes = require('./routes/services');
 const leadRoutes = require('./routes/leads');
 const appointmentRoutes = require('./routes/appointments');
 const reportRoutes = require('./routes/reports');
+const loyaltyRoutes = require('./routes/loyalty');
+const leadStatusRoutes = require('./routes/leadStatuses');
 
 connectDB();
 
@@ -41,6 +43,8 @@ app.use('/api/services', serviceRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/loyalty', loyaltyRoutes);
+app.use('/api/lead-statuses', leadStatusRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'API is running' });

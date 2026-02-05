@@ -16,5 +16,7 @@ const membershipSchema = new mongoose.Schema(
 
 membershipSchema.index({ customerId: 1 });
 membershipSchema.index({ soldAtBranchId: 1 });
+membershipSchema.index({ soldAtBranchId: 1, purchaseDate: 1 });
+membershipSchema.index({ status: 1, soldAtBranchId: 1 });
 
 module.exports = mongoose.model('Membership', membershipSchema);

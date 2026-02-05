@@ -7,7 +7,7 @@ const appointmentSchema = new mongoose.Schema(
     staffUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     serviceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Service' },
     scheduledAt: { type: Date, required: true },
-    status: { type: String, enum: ['scheduled', 'completed', 'no-show', 'cancelled', 'walk-in'], default: 'scheduled' },
+    status: { type: String, enum: ['pending', 'accepted', 'rejected', 'completed', 'scheduled', 'no-show', 'cancelled', 'walk-in'], default: 'pending' },
     notes: { type: String, trim: true },
   },
   { timestamps: true }

@@ -1,5 +1,6 @@
 const express = require('express');
 const Branch = require('../models/Branch');
+const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
 const { getBranchId } = require('../middleware/branchFilter');
 
@@ -10,10 +11,34 @@ router.use(protect);
 router.get('/', async (req, res) => {
   try {
     const bid = getBranchId(req.user);
-    if (bid) {
+    if (req.user.role === 'vendor') {
+      const allForSelection = req.query.all === '1' || req.query.all === 'true';
+      if (allForSelection || !bid) {
+        const allBranches = await Branch.find({ isActive: true }).sort({ name: 1 }).lean();
+        const currentUserId = req.user._id.toString();
+        const assigned = await User.find({ role: 'vendor', branchId: { $ne: null } })
+          .select('branchId')
+          .lean();
+        const takenByOthers = new Set(
+          assigned
+            .filter((u) => u.branchId && u._id.toString() !== currentUserId)
+            .map((u) => (u.branchId && u.branchId._id ? u.branchId._id.toString() : u.branchId.toString()))
+        );
+        const myBranchId = bid ? bid.toString() : null;
+        const available = allBranches.filter(
+          (b) => !takenByOthers.has(b._id.toString()) || b._id.toString() === myBranchId
+        );
+        return res.json({
+          success: true,
+          branches: available.map((b) => ({ id: b._id, name: b.name, code: b.code, address: b.address })),
+        });
+      }
       const branch = await Branch.findById(bid).lean();
-      if (!branch) return res.status(404).json({ success: false, message: 'Branch not found.' });
-      return res.json({ success: true, branches: [branch] });
+      if (!branch) return res.json({ success: true, branches: [] });
+      return res.json({
+        success: true,
+        branches: [{ id: branch._id, name: branch.name, code: branch.code, address: branch.address }],
+      });
     }
     const branches = await Branch.find({ isActive: true }).sort({ name: 1 }).lean();
     res.json({

@@ -1,16 +1,14 @@
 const express = require('express');
 const Lead = require('../models/Lead');
 const { protect } = require('../middleware/auth');
-const { getBranchId } = require('../middleware/branchFilter');
+const { getBranchId, branchFilterForLead } = require('../middleware/branchFilter');
 
 const router = express.Router();
 
 router.use(protect);
 
 function leadFilter(req) {
-  const bid = getBranchId(req.user);
-  if (bid) return { branchId: bid };
-  return {};
+  return branchFilterForLead(req.user);
 }
 
 router.get('/', async (req, res) => {

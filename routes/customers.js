@@ -10,7 +10,11 @@ router.use(protect);
 router.get('/', async (req, res) => {
   try {
     const bid = getBranchId(req.user);
-    const filter = bid ? { primaryBranchId: bid } : {};
+    let filter = {};
+    if (req.user.role === 'vendor') {
+      if (!bid) filter = { _id: { $in: [] } };
+      else filter = { primaryBranchId: bid };
+    } else if (bid) filter = { primaryBranchId: bid };
     const customers = await Customer.find(filter).populate('primaryBranchId', 'name').sort({ name: 1 }).lean();
     res.json({
       success: true,
@@ -21,6 +25,8 @@ router.get('/', async (req, res) => {
         email: c.email,
         membershipCardId: c.membershipCardId,
         primaryBranch: c.primaryBranchId?.name,
+        customerPackage: c.customerPackage,
+        customerPackagePrice: c.customerPackagePrice,
       })),
     });
   } catch (err) {
@@ -30,7 +36,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { name, phone, email, membershipCardId, primaryBranchId, notes } = req.body;
+    const { name, phone, email, membershipCardId, primaryBranchId, customerPackage, customerPackagePrice, notes } = req.body;
     if (!name || !phone)
       return res.status(400).json({ success: false, message: 'Name and phone are required.' });
     const bid = req.user.role === 'admin' ? primaryBranchId : (req.user.branchId?._id || req.user.branchId);
@@ -40,6 +46,8 @@ router.post('/', async (req, res) => {
       email: email || undefined,
       membershipCardId: membershipCardId || undefined,
       primaryBranchId: bid || primaryBranchId,
+      customerPackage: customerPackage || undefined,
+      customerPackagePrice: customerPackagePrice != null && customerPackagePrice !== '' ? Number(customerPackagePrice) : undefined,
       notes: notes || undefined,
     });
     const c = await Customer.findById(customer._id).populate('primaryBranchId', 'name').lean();
@@ -52,6 +60,8 @@ router.post('/', async (req, res) => {
         email: c.email,
         membershipCardId: c.membershipCardId,
         primaryBranch: c.primaryBranchId?.name,
+        customerPackage: c.customerPackage,
+        customerPackagePrice: c.customerPackagePrice,
       },
     });
   } catch (err) {
@@ -72,6 +82,8 @@ router.get('/:id', async (req, res) => {
         email: customer.email,
         membershipCardId: customer.membershipCardId,
         primaryBranch: customer.primaryBranchId?.name,
+        customerPackage: customer.customerPackage,
+        customerPackagePrice: customer.customerPackagePrice,
         notes: customer.notes,
         createdAt: customer.createdAt,
       },
@@ -99,6 +111,8 @@ router.patch('/:id', async (req, res) => {
         email: customer.email,
         membershipCardId: customer.membershipCardId,
         primaryBranch: customer.primaryBranchId?.name,
+        customerPackage: customer.customerPackage,
+        customerPackagePrice: customer.customerPackagePrice,
       },
     });
   } catch (err) {
