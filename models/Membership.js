@@ -11,6 +11,7 @@ const membershipSchema = new mongoose.Schema(
     expiryDate: { type: Date },
     status: { type: String, enum: ['active', 'expired', 'used'], default: 'active' },
     packagePrice: { type: Number },
+    discountAmount: { type: Number, default: 0, min: 0 },
     packageName: { type: String },
   },
   { timestamps: true }

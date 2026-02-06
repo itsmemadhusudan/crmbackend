@@ -9,6 +9,12 @@ const settingsSchema = new mongoose.Schema(
       min: 0,
       max: 100,
     },
+    settlementPercentage: {
+      type: Number,
+      default: 100,
+      min: 0,
+      max: 100,
+    },
   },
   { timestamps: true }
 );

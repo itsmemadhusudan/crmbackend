@@ -3,6 +3,7 @@ const Membership = require('../models/Membership');
 const MembershipType = require('../models/MembershipType');
 const MembershipUsage = require('../models/MembershipUsage');
 const InternalSettlement = require('../models/InternalSettlement');
+const Settings = require('../models/Settings');
 const AuditLog = require('../models/AuditLog');
 const Customer = require('../models/Customer');
 const { protect, authorize } = require('../middleware/auth');
@@ -58,6 +59,7 @@ router.get('/', async (req, res) => {
         expiryDate: m.expiryDate,
         status: m.status,
         packagePrice: m.packagePrice,
+        discountAmount: m.discountAmount ?? 0,
       })),
     });
   } catch (err) {
@@ -67,7 +69,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { customerId, membershipTypeId, totalCredits, soldAtBranchId, expiryDate, customerPackage, customerPackagePrice, customerPackageExpiry } = req.body;
+    const { customerId, membershipTypeId, totalCredits, soldAtBranchId, expiryDate, customerPackage, customerPackagePrice, customerPackageExpiry, discountAmount } = req.body;
     if (!customerId || totalCredits == null)
       return res.status(400).json({ success: false, message: 'customerId and totalCredits are required.' });
     const bid = getBranchId(req.user);
@@ -75,6 +77,7 @@ router.post('/', async (req, res) => {
     if (!soldAt) return res.status(400).json({ success: false, message: 'Branch is required.' });
 
     const packagePrice = customerPackagePrice != null && customerPackagePrice !== '' ? Number(customerPackagePrice) : undefined;
+    const discount = discountAmount != null && discountAmount !== '' ? Math.max(0, Number(discountAmount)) : 0;
     const packageName = customerPackage && String(customerPackage).trim() ? String(customerPackage).trim() : undefined;
     const typeId = membershipTypeId || await getDefaultMembershipTypeId();
     const membership = await Membership.create({
@@ -86,13 +89,16 @@ router.post('/', async (req, res) => {
       status: 'active',
       expiryDate: expiryDate ? new Date(expiryDate) : undefined,
       packagePrice,
+      discountAmount: discount,
       packageName,
     });
+
+    const effectivePrice = (packagePrice != null ? packagePrice : 0) - discount;
 
     if (customerPackage != null || customerPackageExpiry != null) {
       const customerUpdates = {};
       if (customerPackage !== undefined) customerUpdates.customerPackage = customerPackage || null;
-      if (customerPackagePrice != null && customerPackagePrice !== '') customerUpdates.customerPackagePrice = Number(customerPackagePrice);
+      if (customerPackagePrice != null && customerPackagePrice !== '') customerUpdates.customerPackagePrice = effectivePrice;
       if (customerPackageExpiry !== undefined) customerUpdates.customerPackageExpiry = customerPackageExpiry ? new Date(customerPackageExpiry) : null;
       if (Object.keys(customerUpdates).length > 0) {
         await Customer.findByIdAndUpdate(customerId, customerUpdates);
@@ -118,6 +124,7 @@ router.post('/', async (req, res) => {
         expiryDate: m.expiryDate,
         status: m.status,
         packagePrice: m.packagePrice,
+        discountAmount: m.discountAmount ?? 0,
       },
     });
   } catch (err) {
@@ -150,10 +157,12 @@ router.get('/:id', async (req, res) => {
         usedCredits: membership.usedCredits,
         remainingCredits: membership.totalCredits - membership.usedCredits,
         soldAtBranch: membership.soldAtBranchId?.name,
+        soldAtBranchId: membership.soldAtBranchId?._id?.toString(),
         purchaseDate: membership.purchaseDate,
         expiryDate: membership.expiryDate,
         status: membership.status,
         packagePrice: membership.packagePrice,
+        discountAmount: membership.discountAmount ?? 0,
       },
       usageHistory: usages.map((u) => ({
         id: u._id,
@@ -162,6 +171,7 @@ router.get('/:id', async (req, res) => {
         creditsUsed: u.creditsUsed,
         usedAt: u.usedAt,
         notes: u.notes,
+        serviceDetails: u.serviceDetails,
       })),
     });
   } catch (err) {
@@ -220,7 +230,7 @@ router.patch('/:id', async (req, res) => {
 
 router.post('/:id/use', async (req, res) => {
   try {
-    const { creditsUsed = 1, notes } = req.body;
+    const { creditsUsed = 1, notes, serviceDetails } = req.body;
     const bid = getBranchId(req.user);
     const usedAtBranchId = bid || req.body.usedAtBranchId;
     if (!usedAtBranchId) return res.status(400).json({ success: false, message: 'Branch (used at) is required.' });
@@ -246,17 +256,22 @@ router.post('/:id/use', async (req, res) => {
       usedByUserId: req.user._id,
       creditsUsed: toUse,
       notes: notes || undefined,
+      serviceDetails: serviceDetails ? String(serviceDetails).trim() : undefined,
     });
 
     const soldAtBranchId = membership.soldAtBranchId._id || membership.soldAtBranchId;
     if (String(soldAtBranchId) !== String(usedAtBranchId)) {
-      const price = membership.membershipTypeId?.price != null ? Number(membership.membershipTypeId.price) : 0;
+      const settingsDoc = await Settings.findOne().lean();
+      const settlementPercentage = settingsDoc?.settlementPercentage ?? 100;
+      const multiplier = settlementPercentage / 100;
+      const price = membership.membershipTypeId?.price != null ? Number(membership.membershipTypeId.price) : (membership.packagePrice != null ? Number(membership.packagePrice) : 0);
       const totalCredits = membership.totalCredits || 1;
-      const amount = totalCredits > 0 ? (price / totalCredits) * toUse : 0;
+      const baseAmount = totalCredits > 0 ? (price / totalCredits) * toUse : 0;
+      const amount = Math.round(baseAmount * multiplier * 100) / 100;
       await InternalSettlement.create({
         fromBranchId: soldAtBranchId,
         toBranchId: usedAtBranchId,
-        amount: Math.round(amount * 100) / 100,
+        amount,
         reason: `Membership usage: ${membership.membershipTypeId?.name || 'Membership'} - ${toUse} credit(s)`,
         membershipUsageId: usage._id,
         status: 'pending',

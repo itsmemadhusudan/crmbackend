@@ -36,10 +36,19 @@ router.use(protect);
 router.get('/', async (req, res) => {
   try {
     const bid = getBranchId(req.user);
+    const forDropdown = req.query.forDropdown === '1' || req.query.forDropdown === 'true';
+    const branchIdQuery = req.query.branchId;
     let filter = {};
-    if (req.user.role === 'vendor') {
-      filter = { createdBy: req.user._id };
-    } else if (bid) filter = { primaryBranchId: bid };
+    if (!forDropdown) {
+      if (req.user.role === 'vendor') {
+        filter = { createdBy: req.user._id };
+      } else if (req.user.role === 'admin' && branchIdQuery) {
+        filter = { primaryBranchId: branchIdQuery };
+      } else if (bid) {
+        filter = { primaryBranchId: bid };
+      }
+      // admin with no branchId / no bid: filter stays {} → return all customers (including those created from Settlements)
+    }
     const customers = await Customer.find(filter).populate('primaryBranchId', 'name').sort({ name: 1 }).lean();
     res.json({
       success: true,
@@ -50,6 +59,7 @@ router.get('/', async (req, res) => {
         email: c.email,
         membershipCardId: c.membershipCardId,
         primaryBranch: c.primaryBranchId?.name,
+        primaryBranchId: c.primaryBranchId?._id?.toString() || c.primaryBranchId?.toString() || null,
         customerPackage: c.customerPackage,
         customerPackagePrice: c.customerPackagePrice,
         customerPackageExpiry: c.customerPackageExpiry ? c.customerPackageExpiry.toISOString().split('T')[0] : null,

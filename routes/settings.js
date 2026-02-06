@@ -21,6 +21,7 @@ router.get('/', async (req, res) => {
       success: true,
       settings: {
         revenuePercentage: doc.revenuePercentage ?? 10,
+        settlementPercentage: doc.settlementPercentage ?? 100,
       },
     });
   } catch (err) {
@@ -34,13 +35,19 @@ router.patch('/', async (req, res) => {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Admin only.' });
     }
-    const { revenuePercentage } = req.body;
+    const { revenuePercentage, settlementPercentage } = req.body;
     const update = {};
     if (typeof revenuePercentage === 'number' && revenuePercentage >= 0 && revenuePercentage <= 100) {
       update.revenuePercentage = revenuePercentage;
     } else if (typeof revenuePercentage === 'string') {
       const n = parseFloat(revenuePercentage);
       if (!Number.isNaN(n) && n >= 0 && n <= 100) update.revenuePercentage = n;
+    }
+    if (typeof settlementPercentage === 'number' && settlementPercentage >= 0 && settlementPercentage <= 100) {
+      update.settlementPercentage = settlementPercentage;
+    } else if (typeof settlementPercentage === 'string') {
+      const n = parseFloat(settlementPercentage);
+      if (!Number.isNaN(n) && n >= 0 && n <= 100) update.settlementPercentage = n;
     }
     const doc = await Settings.findOneAndUpdate(
       {},
@@ -51,6 +58,7 @@ router.patch('/', async (req, res) => {
       success: true,
       settings: {
         revenuePercentage: doc.revenuePercentage ?? 10,
+        settlementPercentage: doc.settlementPercentage ?? 100,
       },
     });
   } catch (err) {

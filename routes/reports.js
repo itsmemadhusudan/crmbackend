@@ -49,7 +49,7 @@ router.get('/branch-dashboard', async (req, res) => {
     todayEnd.setHours(23, 59, 59, 999);
 
     const [allMembershipsForBranch, membershipsInPeriod, todayAppointments, leadsToFollowUp, completedAppointments, usageInBranch, activeMembershipCount, expiredMembershipCount, usedMembershipCount, customersCount] = await Promise.all([
-      Membership.find({ soldAtBranchId: bid }).select('packagePrice membershipTypeId').populate('membershipTypeId', 'price').lean(),
+      Membership.find({ soldAtBranchId: bid }).select('packagePrice discountAmount membershipTypeId').populate('membershipTypeId', 'price').lean(),
       Membership.find({ soldAtBranchId: bid, purchaseDate: { $gte: fromDate, $lte: toDate } })
         .populate('membershipTypeId', 'name price')
         .lean(),
@@ -73,15 +73,12 @@ router.get('/branch-dashboard', async (req, res) => {
       Customer.countDocuments({ primaryBranchId: bid }),
     ]);
 
+    const effectivePrice = (m) => (m.packagePrice != null ? Number(m.packagePrice) : (m.membershipTypeId?.price || 0)) - (m.discountAmount ?? 0);
     let totalSales = 0;
-    allMembershipsForBranch.forEach((m) => {
-      totalSales += m.packagePrice != null ? Number(m.packagePrice) : (m.membershipTypeId?.price || 0);
-    });
+    allMembershipsForBranch.forEach((m) => { totalSales += effectivePrice(m); });
 
     let membershipSalesRevenue = 0;
-    membershipsInPeriod.forEach((m) => {
-      membershipSalesRevenue += m.packagePrice != null ? Number(m.packagePrice) : (m.membershipTypeId?.price || 0);
-    });
+    membershipsInPeriod.forEach((m) => { membershipSalesRevenue += effectivePrice(m); });
 
     res.json({
       success: true,
@@ -142,7 +139,7 @@ router.get('/sales-dashboard', async (req, res) => {
         .populate('membershipTypeId', 'name totalCredits price serviceCategory')
         .populate('soldAtBranchId', 'name')
         .lean(),
-      Membership.find(branchFilter).select('packagePrice membershipTypeId').populate('membershipTypeId', 'price').lean(),
+      Membership.find(branchFilter).select('packagePrice discountAmount membershipTypeId').populate('membershipTypeId', 'price').lean(),
       Membership.countDocuments({ ...branchFilter, status: 'active' }),
       Membership.countDocuments(branchFilter),
       Membership.find(branchFilter)
@@ -158,16 +155,15 @@ router.get('/sales-dashboard', async (req, res) => {
     const revenuePercentage = settingsDoc?.revenuePercentage ?? 10;
     const revenueMultiplier = revenuePercentage / 100;
 
+    const effectivePrice = (m) => (m.packagePrice != null ? Number(m.packagePrice) : (m.membershipTypeId?.price || 0)) - (m.discountAmount ?? 0);
     let totalSales = 0;
-    allMembershipsForSales.forEach((m) => {
-      totalSales += m.packagePrice != null ? Number(m.packagePrice) : (m.membershipTypeId?.price || 0);
-    });
+    allMembershipsForSales.forEach((m) => { totalSales += effectivePrice(m); });
 
     const byBranchSales = {};
     const byBranchCount = {};
     const byServiceSales = {};
     memberships.forEach((m) => {
-      const price = m.packagePrice != null ? Number(m.packagePrice) : (m.membershipTypeId?.price || 0);
+      const price = effectivePrice(m);
       const bName = m.soldAtBranchId?.name || 'Unknown';
       byBranchSales[bName] = (byBranchSales[bName] || 0) + price;
       byBranchCount[bName] = (byBranchCount[bName] || 0) + 1;
@@ -189,7 +185,7 @@ router.get('/sales-dashboard', async (req, res) => {
     }));
 
     const breakdown = breakdownMemberships.map((m) => {
-      const price = m.packagePrice != null ? Number(m.packagePrice) : (m.membershipTypeId?.price || 0);
+      const price = effectivePrice(m);
       return {
         customerName: m.customerId?.name || '—',
         packageName: m.packageName || m.customerId?.customerPackage || m.membershipTypeId?.name || '—',

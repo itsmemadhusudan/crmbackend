@@ -8,6 +8,7 @@ const membershipUsageSchema = new mongoose.Schema(
     creditsUsed: { type: Number, default: 1, min: 1 },
     usedAt: { type: Date, default: Date.now },
     notes: { type: String, trim: true },
+    serviceDetails: { type: String, trim: true },
   },
   { timestamps: true }
 );
