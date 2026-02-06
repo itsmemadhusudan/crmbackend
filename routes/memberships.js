@@ -1,10 +1,20 @@
 const express = require('express');
 const Membership = require('../models/Membership');
+const MembershipType = require('../models/MembershipType');
 const MembershipUsage = require('../models/MembershipUsage');
 const InternalSettlement = require('../models/InternalSettlement');
 const AuditLog = require('../models/AuditLog');
+const Customer = require('../models/Customer');
 const { protect, authorize } = require('../middleware/auth');
 const { getBranchId } = require('../middleware/branchFilter');
+
+async function getDefaultMembershipTypeId() {
+  let type = await MembershipType.findOne({ isActive: true }).sort({ name: 1 }).lean();
+  if (!type) {
+    type = await MembershipType.create({ name: 'Default', totalCredits: 1 });
+  }
+  return type._id;
+}
 
 const router = express.Router();
 
@@ -47,6 +57,7 @@ router.get('/', async (req, res) => {
         purchaseDate: m.purchaseDate,
         expiryDate: m.expiryDate,
         status: m.status,
+        packagePrice: m.packagePrice,
       })),
     });
   } catch (err) {
@@ -56,21 +67,37 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { customerId, membershipTypeId, totalCredits, soldAtBranchId } = req.body;
-    if (!customerId || !membershipTypeId || totalCredits == null)
-      return res.status(400).json({ success: false, message: 'customerId, membershipTypeId and totalCredits are required.' });
+    const { customerId, membershipTypeId, totalCredits, soldAtBranchId, expiryDate, customerPackage, customerPackagePrice, customerPackageExpiry } = req.body;
+    if (!customerId || totalCredits == null)
+      return res.status(400).json({ success: false, message: 'customerId and totalCredits are required.' });
     const bid = getBranchId(req.user);
     const soldAt = req.user.role === 'admin' ? soldAtBranchId : (bid || soldAtBranchId);
     if (!soldAt) return res.status(400).json({ success: false, message: 'Branch is required.' });
 
+    const packagePrice = customerPackagePrice != null && customerPackagePrice !== '' ? Number(customerPackagePrice) : undefined;
+    const packageName = customerPackage && String(customerPackage).trim() ? String(customerPackage).trim() : undefined;
+    const typeId = membershipTypeId || await getDefaultMembershipTypeId();
     const membership = await Membership.create({
       customerId,
-      membershipTypeId,
+      membershipTypeId: typeId,
       totalCredits: Number(totalCredits),
       usedCredits: 0,
       soldAtBranchId: soldAt,
       status: 'active',
+      expiryDate: expiryDate ? new Date(expiryDate) : undefined,
+      packagePrice,
+      packageName,
     });
+
+    if (customerPackage != null || customerPackageExpiry != null) {
+      const customerUpdates = {};
+      if (customerPackage !== undefined) customerUpdates.customerPackage = customerPackage || null;
+      if (customerPackagePrice != null && customerPackagePrice !== '') customerUpdates.customerPackagePrice = Number(customerPackagePrice);
+      if (customerPackageExpiry !== undefined) customerUpdates.customerPackageExpiry = customerPackageExpiry ? new Date(customerPackageExpiry) : null;
+      if (Object.keys(customerUpdates).length > 0) {
+        await Customer.findByIdAndUpdate(customerId, customerUpdates);
+      }
+    }
 
     const m = await Membership.findById(membership._id)
       .populate('customerId', 'name phone')
@@ -88,7 +115,9 @@ router.post('/', async (req, res) => {
         usedCredits: m.usedCredits,
         soldAtBranch: m.soldAtBranchId?.name,
         purchaseDate: m.purchaseDate,
+        expiryDate: m.expiryDate,
         status: m.status,
+        packagePrice: m.packagePrice,
       },
     });
   } catch (err) {
@@ -124,6 +153,7 @@ router.get('/:id', async (req, res) => {
         purchaseDate: membership.purchaseDate,
         expiryDate: membership.expiryDate,
         status: membership.status,
+        packagePrice: membership.packagePrice,
       },
       usageHistory: usages.map((u) => ({
         id: u._id,

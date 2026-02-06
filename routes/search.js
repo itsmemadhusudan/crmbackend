@@ -15,7 +15,7 @@ router.get('/customers-memberships', async (req, res) => {
     }
     const term = String(q).trim();
     const isPhone = /^\d+$/.test(term);
-    const customerFilter = {};
+    const customerFilter = req.user.role === 'vendor' ? { createdBy: req.user._id } : {};
 
     let customers = [];
     if (isPhone) {

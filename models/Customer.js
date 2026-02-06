@@ -7,8 +7,10 @@ const customerSchema = new mongoose.Schema(
     email: { type: String, trim: true, lowercase: true },
     membershipCardId: { type: String, trim: true },
     primaryBranchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     customerPackage: { type: String, trim: true },
     customerPackagePrice: { type: Number, min: 0 },
+    customerPackageExpiry: { type: Date },
     notes: { type: String, trim: true },
   },
   { timestamps: true }

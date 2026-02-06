@@ -85,18 +85,20 @@ router.post('/login', async (req, res) => {
   }
 });
 
-router.get('/me', protect, (req, res) => {
-  const approvalStatus = req.user.role === 'admin' ? 'approved' : (req.user.approvalStatus || 'pending');
-  const branchId = req.user.branchId?._id || req.user.branchId || null;
-  const branchName = req.user.branchId?.name || null;
+router.get('/me', protect, async (req, res) => {
+  const u = await User.findById(req.user._id).select('-password').populate('branchId', 'name').lean();
+  if (!u) return res.status(401).json({ success: false, message: 'User not found.' });
+  const approvalStatus = u.role === 'admin' ? 'approved' : (u.approvalStatus || 'pending');
+  const branchId = u.branchId?._id || u.branchId || null;
+  const branchName = u.branchId?.name || null;
   res.json({
     success: true,
     user: {
-      id: req.user._id,
-      name: req.user.name,
-      email: req.user.email,
-      role: req.user.role,
-      vendorName: req.user.vendorName,
+      id: u._id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      vendorName: u.vendorName,
       approvalStatus,
       branchId,
       branchName,

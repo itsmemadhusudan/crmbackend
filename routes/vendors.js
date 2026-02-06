@@ -37,6 +37,50 @@ router.get('/', async (req, res) => {
   }
 });
 
+/** POST /api/vendors - create a new vendor/staff (admin only). Stored as role vendor, approvalStatus approved; can login and go to vendor dashboard. */
+router.post('/', async (req, res) => {
+  try {
+    const { name, email, password, branchId, vendorName } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, message: 'Name, email and password are required.' });
+    }
+    if (String(password).length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
+    }
+    const existing = await User.findOne({ email: String(email).toLowerCase().trim() });
+    if (existing) {
+      return res.status(400).json({ success: false, message: 'That email is already registered.' });
+    }
+    const vendor = await User.create({
+      name: String(name).trim(),
+      email: String(email).toLowerCase().trim(),
+      password: String(password),
+      role: 'vendor',
+      vendorName: vendorName ? String(vendorName).trim() : undefined,
+      branchId: branchId || null,
+      approvalStatus: 'approved',
+    });
+    if (vendor.approvalStatus !== 'approved') {
+      await User.findByIdAndUpdate(vendor._id, { approvalStatus: 'approved' });
+    }
+    const v = await User.findById(vendor._id).select('name email vendorName approvalStatus branchId').populate('branchId', 'name').lean();
+    res.status(201).json({
+      success: true,
+      vendor: {
+        id: v._id,
+        name: v.name,
+        email: v.email,
+        vendorName: v.vendorName,
+        approvalStatus: v.approvalStatus || 'approved',
+        branchId: v.branchId?._id || v.branchId,
+        branchName: v.branchId?.name,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to create vendor.' });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const vendor = await User.findOne({ _id: req.params.id, role: 'vendor' })

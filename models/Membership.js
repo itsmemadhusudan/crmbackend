@@ -10,6 +10,8 @@ const membershipSchema = new mongoose.Schema(
     purchaseDate: { type: Date, default: Date.now },
     expiryDate: { type: Date },
     status: { type: String, enum: ['active', 'expired', 'used'], default: 'active' },
+    packagePrice: { type: Number },
+    packageName: { type: String },
   },
   { timestamps: true }
 );
