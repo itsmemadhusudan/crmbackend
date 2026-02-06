@@ -226,6 +226,7 @@ router.get('/settlements', async (req, res) => {
       .populate('fromBranchId', 'name')
       .populate('toBranchId', 'name')
       .sort({ createdAt: -1 })
+      .limit(500)
       .lean();
 
     const summary = {};

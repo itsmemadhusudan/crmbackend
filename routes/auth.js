@@ -59,7 +59,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
     if (!user.isActive) {
-      return res.status(401).json({ success: false, message: 'Account is deactivated.' });
+      return res.status(401).json({ success: false, message: 'Your account has been blocked. Contact admin.' });
     }
     const u = await User.findById(user._id).populate('branchId', 'name').select('-password').lean();
     const branchId = u.branchId?._id || u.branchId || null;

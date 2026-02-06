@@ -49,7 +49,9 @@ router.get('/', async (req, res) => {
       }
       // admin with no branchId / no bid: filter stays {} → return all customers (including those created from Settlements)
     }
-    const customers = await Customer.find(filter).populate('primaryBranchId', 'name').sort({ name: 1 }).lean();
+    const limitParam = req.query.limit;
+    const limit = limitParam ? Math.min(1000, Math.max(1, parseInt(limitParam, 10))) : 500;
+    const customers = await Customer.find(filter).populate('primaryBranchId', 'name').sort({ name: 1 }).limit(limit).lean();
     res.json({
       success: true,
       customers: customers.map((c) => ({

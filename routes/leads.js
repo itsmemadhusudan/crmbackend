@@ -12,16 +12,21 @@ function leadFilter(req) {
   return branchFilterForLead(req.user);
 }
 
+const DEFAULT_LEADS_LIMIT = 200;
+const MAX_LEADS_LIMIT = 500;
+
 router.get('/', async (req, res) => {
   try {
-    const { status, branchId } = req.query;
+    const { status, branchId, limit: limitParam } = req.query;
     const filter = leadFilter(req);
     if (req.user.role === 'admin' && branchId) filter.branchId = branchId;
     if (status) filter.status = status;
 
+    const limit = Math.min(MAX_LEADS_LIMIT, Math.max(1, parseInt(limitParam, 10) || DEFAULT_LEADS_LIMIT));
     const leads = await Lead.find(filter)
       .populate('branchId', 'name')
       .sort({ createdAt: -1 })
+      .limit(limit)
       .lean();
 
     res.json({
@@ -35,7 +40,7 @@ router.get('/', async (req, res) => {
         branch: l.branchId?.name,
         branchId: l.branchId?._id,
         status: l.status,
-        followUps: l.followUps?.length || 0,
+        followUpsCount: l.followUps?.length || 0,
         notes: l.notes,
         createdAt: l.createdAt,
       })),

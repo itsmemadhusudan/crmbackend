@@ -18,7 +18,7 @@ exports.protect = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'User not found.' });
     }
     if (!user.isActive) {
-      return res.status(401).json({ success: false, message: 'Account is deactivated.' });
+      return res.status(401).json({ success: false, message: 'Your account has been blocked. Contact admin.' });
     }
     req.user = user;
     next();

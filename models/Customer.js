@@ -18,6 +18,7 @@ const customerSchema = new mongoose.Schema(
 
 customerSchema.index({ phone: 1 });
 customerSchema.index({ primaryBranchId: 1, name: 1 });
+customerSchema.index({ createdBy: 1 });
 customerSchema.index({ name: 'text', membershipCardId: 'text' });
 
 module.exports = mongoose.model('Customer', customerSchema);

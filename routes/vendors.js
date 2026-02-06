@@ -7,17 +7,21 @@ const router = express.Router();
 router.use(protect);
 router.use(authorize('admin'));
 
+const MAX_VENDORS_LIMIT = 500;
+
 router.get('/', async (req, res) => {
   try {
-    const { status } = req.query;
+    const { status, limit: limitParam } = req.query;
     const filter = { role: 'vendor' };
     if (status && ['pending', 'approved', 'rejected'].includes(status)) {
       filter.approvalStatus = status;
     }
+    const limit = limitParam ? Math.min(MAX_VENDORS_LIMIT, Math.max(1, parseInt(limitParam, 10))) : MAX_VENDORS_LIMIT;
     const vendors = await User.find(filter)
-      .select('name email vendorName approvalStatus branchId createdAt')
+      .select('name email vendorName approvalStatus branchId isActive createdAt')
       .populate('branchId', 'name code')
       .sort({ createdAt: -1 })
+      .limit(limit)
       .lean();
     res.json({
       success: true,
@@ -29,6 +33,7 @@ router.get('/', async (req, res) => {
         approvalStatus: v.approvalStatus || 'pending',
         branchId: v.branchId?._id || v.branchId,
         branchName: v.branchId?.name,
+        isActive: v.isActive !== false,
         createdAt: v.createdAt,
       })),
     });
@@ -84,7 +89,7 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const vendor = await User.findOne({ _id: req.params.id, role: 'vendor' })
-      .select('name email vendorName approvalStatus branchId createdAt')
+      .select('name email vendorName approvalStatus branchId isActive createdAt')
       .populate('branchId', 'name code')
       .lean();
     if (!vendor) return res.status(404).json({ success: false, message: 'Vendor not found.' });
@@ -98,6 +103,7 @@ router.get('/:id', async (req, res) => {
         approvalStatus: vendor.approvalStatus || 'pending',
         branchId: vendor.branchId?._id || vendor.branchId || null,
         branchName: vendor.branchId?.name || null,
+        isActive: vendor.isActive !== false,
         createdAt: vendor.createdAt,
       },
     });
@@ -154,29 +160,57 @@ router.patch('/:id/reject', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+/** Block vendor: set isActive false. Blocked user cannot login or use API. */
+router.patch('/:id/block', async (req, res) => {
   try {
-    const vendor = await User.findOne({ _id: req.params.id, role: 'vendor' })
-      .select('name email vendorName approvalStatus branchId createdAt')
-      .populate('branchId', 'name code address')
-      .lean();
+    const vendor = await User.findOne({ _id: req.params.id, role: 'vendor' });
     if (!vendor) return res.status(404).json({ success: false, message: 'Vendor not found.' });
+    vendor.isActive = false;
+    await vendor.save();
+    const v = await User.findById(vendor._id).select('name email vendorName approvalStatus branchId isActive').populate('branchId', 'name').lean();
     res.json({
       success: true,
+      message: 'Vendor blocked.',
       vendor: {
-        id: vendor._id,
-        name: vendor.name,
-        email: vendor.email,
-        vendorName: vendor.vendorName,
-        approvalStatus: vendor.approvalStatus || 'pending',
-        branchId: vendor.branchId?._id || vendor.branchId,
-        branchName: vendor.branchId?.name,
-        branchCode: vendor.branchId?.code,
-        createdAt: vendor.createdAt,
+        id: v._id,
+        name: v.name,
+        email: v.email,
+        vendorName: v.vendorName,
+        approvalStatus: v.approvalStatus,
+        branchId: v.branchId?._id || v.branchId,
+        branchName: v.branchId?.name,
+        isActive: false,
       },
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message || 'Failed to fetch vendor.' });
+    res.status(500).json({ success: false, message: err.message || 'Failed to block vendor.' });
+  }
+});
+
+/** Activate vendor: set isActive true. */
+router.patch('/:id/active', async (req, res) => {
+  try {
+    const vendor = await User.findOne({ _id: req.params.id, role: 'vendor' });
+    if (!vendor) return res.status(404).json({ success: false, message: 'Vendor not found.' });
+    vendor.isActive = true;
+    await vendor.save();
+    const v = await User.findById(vendor._id).select('name email vendorName approvalStatus branchId isActive').populate('branchId', 'name').lean();
+    res.json({
+      success: true,
+      message: 'Vendor activated.',
+      vendor: {
+        id: v._id,
+        name: v.name,
+        email: v.email,
+        vendorName: v.vendorName,
+        approvalStatus: v.approvalStatus,
+        branchId: v.branchId?._id || v.branchId,
+        branchName: v.branchId?.name,
+        isActive: true,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to activate vendor.' });
   }
 });
 
@@ -197,7 +231,7 @@ router.patch('/:id', async (req, res) => {
     if (vendorName !== undefined) vendor.vendorName = vendorName || '';
     if (branchId !== undefined) vendor.branchId = branchId || null;
     await vendor.save();
-    const v = await User.findById(vendor._id).select('name email vendorName approvalStatus branchId').populate('branchId', 'name code').lean();
+    const v = await User.findById(vendor._id).select('name email vendorName approvalStatus branchId isActive').populate('branchId', 'name code').lean();
     res.json({
       success: true,
       vendor: {
@@ -208,6 +242,7 @@ router.patch('/:id', async (req, res) => {
         approvalStatus: v.approvalStatus,
         branchId: v.branchId?._id,
         branchName: v.branchId?.name,
+        isActive: v.isActive !== false,
       },
     });
   } catch (err) {
